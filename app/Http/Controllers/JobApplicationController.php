@@ -34,23 +34,29 @@ class JobApplicationController extends Controller
         // Validate request
         $validated = $request->validate([
             // Candidate fields
-            'first_name' => 'required|string|max:255',
-            'last_name' => 'required|string|max:255',
-            'designation' => 'nullable|string|max:255',
-            'experience' => 'required|numeric|min:0|max:99.9',
-            'education' => 'required|string|max:255',
-            'phone' => 'required|string|max:20',
-            'email' => 'required|email|unique:candidates,email',
-            'country' => 'required|string|max:100',
-            'location' => 'required|string|max:255',
-            'current_ctc' => 'nullable|numeric|min:0',
-            'expected_ctc' => 'required|numeric|min:0',
-            'profile_pic' => 'nullable|file|mimes:jpg,jpeg,png|max:2048',
-            'resume' => 'nullable|file|mimes:pdf,doc,docx|max:5120',
-            'source_id' => 'nullable|integer|exists:sources,id',
-            'company_id' => 'nullable|integer|exists:companies,id',
-            'job_id' => 'required|exists:job_posts,id',
-            'status' => 'nullable|in:Active,Rejected',
+            'first_name'     => 'required|string|max:255',
+            'last_name'      => 'required|string|max:255',
+            'designation'    => 'nullable|string|max:255',
+            'experience'     => 'required|numeric|min:0|max:99.9',
+            'education'      => 'required|string|max:255',
+            'phone'          => 'required|string|max:20',
+            'email'          => 'required|email|unique:candidates,email',
+            'country'        => 'required|string|max:100',
+            'location'       => 'required|string|max:255',
+            'current_ctc'    => 'nullable|numeric|min:0',
+            'expected_ctc'   => 'required|numeric|min:0',
+            'profile_pic'    => 'nullable|file|mimes:jpg,jpeg,png|max:5120',
+            'resume'         => 'nullable|file|mimes:pdf,doc,docx|max:5120',
+            'source_id'      => 'nullable|integer|exists:sources,id',
+            'company_id'     => 'nullable|integer|exists:companies,id',
+            'job_id'         => 'required|exists:job_posts,id',
+            'status'         => 'nullable|in:Active,Rejected',
+        ], [
+            // Custom messages
+            'profile_pic.max'   => 'Profile picture must not exceed 5 MB.',
+            'profile_pic.mimes' => 'Profile picture must be a JPG, JPEG, or PNG.',
+            'resume.max'        => 'Resume must not exceed 5 MB.',
+            'resume.mimes'      => 'Resume must be a PDF, DOC, or DOCX file.',
         ]);
 
         // Ensure the job post belongs to the same company
@@ -127,8 +133,20 @@ class JobApplicationController extends Controller
             'expected_ctc' => 'required|numeric',
             'country'      => 'required|string|max:191',
             'education'    => 'required|string|max:191',
-            'profile_pic'  => 'sometimes|file|mimes:jpg,jpeg,png|max:2048',
-            'resume'       => 'sometimes|file|mimes:pdf,doc,docx|max:2048',
+            'profile_pic'  => 'sometimes|file|mimes:jpg,jpeg,png|max:5120',
+            'resume'       => 'sometimes|file|mimes:pdf,doc,docx|max:5120',
+        ], [
+            // Custom messages
+            'profile_pic.max'   => 'Profile picture must not exceed 5 MB.',
+            'profile_pic.mimes' => 'Profile picture must be a JPG, JPEG, or PNG.',
+            'resume.max'        => 'Resume must not exceed 5 MB.',
+            'resume.mimes'      => 'Resume must be a PDF, DOC, or DOCX file.',
+
+            // Some useful extras
+            'email.email'       => 'Please enter a valid email address.',
+            'email.max'         => 'Email may not be greater than 191 characters.',
+            'phone.max'         => 'Phone number may not exceed 20 characters.',
+            'experience.numeric' => 'Experience must be a number.',
         ])->validate();
 
         $candidate->update($validated);
@@ -139,81 +157,84 @@ class JobApplicationController extends Controller
         ]);
     }
 
-public function updateCandidateFiles(Request $request, $applicationId)
-{
-    $application = CandidateApplication::with('candidate')->findOrFail($applicationId);
-    $candidate = $application->candidate;
+    public function updateCandidateFiles(Request $request, $applicationId)
+    {
+        $application = CandidateApplication::with('candidate')->findOrFail($applicationId);
+        $candidate = $application->candidate;
 
-    // Validate only the files that are present
-    $request->validate([
-        'profile_pic' => 'sometimes|file|mimes:jpg,jpeg,png|max:2048',
-        'resume'      => 'sometimes|file|mimes:pdf,doc,docx|max:5120',
-    ]);
+        // Validate only the files that are present
+        $request->validate([
+            'profile_pic' => 'sometimes|file|mimes:jpg,jpeg,png|max:5120',
+            'resume'      => 'sometimes|file|mimes:pdf,doc,docx|max:5120',
+        ], [
+            'profile_pic.max'   => 'Profile picture must not exceed 5 MB.',
+            'profile_pic.mimes' => 'Profile picture must be a JPG, JPEG, or PNG.',
+            'resume.max'        => 'Resume must not exceed 5 MB.',
+            'resume.mimes'      => 'Resume must be a PDF, DOC, or DOCX file.',
+        ]);
 
-    $updateData = [];
-    // Handle profile picture
-    if ($request->hasFile('profile_pic')) {
 
-        if ($candidate->profile_pic && Storage::disk('private')->exists($candidate->profile_pic)) {
-            Storage::disk('private')->delete($candidate->profile_pic);
+        $updateData = [];
+        // Handle profile picture
+        if ($request->hasFile('profile_pic')) {
+
+            if ($candidate->profile_pic && Storage::disk('private')->exists($candidate->profile_pic)) {
+                Storage::disk('private')->delete($candidate->profile_pic);
+            }
+
+            $path = $request->file('profile_pic')->storeAs(
+                'candidates/profile_pics',
+                uniqid() . '.' . $request->file('profile_pic')->extension(),
+                'private'
+            );
+            $updateData['profile_pic'] = $path;
         }
 
-        $path = $request->file('profile_pic')->storeAs(
-            'candidates/profile_pics',
-            uniqid() . '.' . $request->file('profile_pic')->extension(),
-            'private'
-        );
-        $updateData['profile_pic'] = $path;
-    }
+        // Handle resume
+        if ($request->hasFile('resume')) {
+            if ($candidate->resume && Storage::disk('private')->exists($candidate->resume)) {
+                Storage::disk('private')->delete($candidate->resume);
+            }
 
-    // Handle resume
-    if ($request->hasFile('resume')) {
-        if ($candidate->resume && Storage::disk('private')->exists($candidate->resume)) {
-            Storage::disk('private')->delete($candidate->resume);
+            $path = $request->file('resume')->storeAs(
+                'candidates/resumes',
+                uniqid() . '.' . $request->file('resume')->extension(),
+                'private'
+            );
+            $updateData['resume'] = $path;
         }
 
-        $path = $request->file('resume')->storeAs(
-            'candidates/resumes',
-            uniqid() . '.' . $request->file('resume')->extension(),
-            'private'
-        );
-        $updateData['resume'] = $path;
-    }
+        // Only update if we have any new files
+        if (!empty($updateData)) {
+            Log::info('Updating candidate with new file paths', $updateData);
+            $candidate->update($updateData);
+        } else {
+            Log::warning('No valid files found to update');
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No files uploaded or invalid file format.',
+            ], 400);
+        }
 
-    // Only update if we have any new files
-    if (!empty($updateData)) {
-        Log::info('Updating candidate with new file paths', $updateData);
-        $candidate->update($updateData);
-    } else {
-        Log::warning('No valid files found to update');
+        // Refresh and return URLs
+        $candidate->refresh();
+
+        $generateFileUrl = fn($filePath) => $filePath
+            ? url('api/v.1/files/' . implode('/', array_map('rawurlencode', explode('/', $filePath))))
+            : null;
+
+        $candidateWithUrls = $candidate->toArray();
+        $candidateWithUrls['profile_pic'] = $generateFileUrl($candidate->profile_pic);
+        $candidateWithUrls['resume'] = $generateFileUrl($candidate->resume);
+
+        Log::info('Returning updated candidate data', $candidateWithUrls);
+
         return response()->json([
-            'status' => 'error',
-            'message' => 'No files uploaded or invalid file format.',
-        ], 400);
+            'status' => 'success',
+            'message' => 'Files updated successfully',
+            'candidate' => $candidateWithUrls,
+        ]);
     }
-
-    // Refresh and return URLs
-    $candidate->refresh();
-
-    $generateFileUrl = fn($filePath) => $filePath
-        ? url('api/v.1/files/' . implode('/', array_map('rawurlencode', explode('/', $filePath))))
-        : null;
-
-    $candidateWithUrls = $candidate->toArray();
-    $candidateWithUrls['profile_pic'] = $generateFileUrl($candidate->profile_pic);
-    $candidateWithUrls['resume'] = $generateFileUrl($candidate->resume);
-
-    Log::info('Returning updated candidate data', $candidateWithUrls);
-
-    return response()->json([
-        'status' => 'success',
-        'message' => 'Files updated successfully',
-        'candidate' => $candidateWithUrls,
-    ]);
-}
-
-
-
 
 
     /**

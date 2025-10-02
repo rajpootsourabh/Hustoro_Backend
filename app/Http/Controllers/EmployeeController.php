@@ -64,22 +64,29 @@ class EmployeeController extends Controller
             // Step 1: Personal Details
             $personalData = $requestData['personal'] ?? [];
             $validatedEmployee = Validator::make($personalData, [
-                'first_name' => 'required|string',
-                'middle_name' => 'nullable|string',
-                'last_name' => 'required|string',
-                'preferred_name' => 'nullable|string',
-                'country' => 'nullable|string',
-                'address' => 'nullable|string',
-                'gender' => 'nullable|string|in:Male,Female,Others',
-                'birthdate' => 'nullable|date',
-                'marital_status' => 'required|string|in:Single,Married,Common Law,Domestic Partnership',
-                'phone' => 'nullable|string',
-                'work_email' => 'nullable|email',
-                'personal_email' => 'nullable|email',
+                'first_name'      => 'required|string',
+                'middle_name'     => 'nullable|string',
+                'last_name'       => 'required|string',
+                'preferred_name'  => 'nullable|string',
+                'country'         => 'nullable|string',
+                'address'         => 'nullable|string',
+                'gender'          => 'nullable|string|in:Male,Female,Others',
+                'birthdate'       => 'nullable|date',
+                'marital_status'  => 'required|string|in:Single,Married,Common Law,Domestic Partnership',
+                'phone'           => 'nullable|string',
+                'work_email'      => 'nullable|email',
+                'personal_email'  => 'nullable|email',
                 'chat_video_call' => 'nullable|string',
-                'social_media' => 'nullable|string',
-                'profile_image' => 'nullable|file|image|max:2048',
+                'social_media'    => 'nullable|string',
+
+                // Profile image up to 5 MB, JPG/PNG/JPEG only
+                'profile_image'   => 'nullable|file|mimes:jpg,jpeg,png|max:5120',
+            ], [
+                // Custom error messages
+                'profile_image.max'   => 'Profile image must not exceed 5 MB.',
+                'profile_image.mimes' => 'Profile image must be a valid JPG or PNG file.',
             ])->validate();
+
 
             if ($request->hasFile('personal.profileImage')) {
                 $image = $request->file('personal.profileImage');
@@ -139,23 +146,32 @@ class EmployeeController extends Controller
             $legalData = $requestData['legal_documents'] ?? [];
 
             $validatedLegal = Validator::make($legalData, [
-                'social_security_number' => 'required|string',
-                'national_id' => 'required|string',
-                'nationality' => 'nullable|string',
-                'citizenship' => 'nullable|string',
-                'passport' => 'nullable|string',
-                'work_visa' => 'nullable|string',
-                'visa_details' => 'nullable|string',
-                'issue_date_national_id' => 'nullable|date',
-                'issue_date_tax_id' => 'nullable|date',
-                'issue_date_s_s_n' => 'nullable|date',
-                'tax_id' => 'required|string',
-                'social_insurance_number' => 'nullable|string',
-                'ssn_file' => 'nullable|file|mimes:pdf,jpg,png|max:2048',
-                'national_id_file' => 'nullable|file|mimes:pdf,jpg,png|max:2048',
-                'tax_id_file' => 'nullable|file|mimes:pdf,jpg,png|max:2048',
-            ])->validate();
+                'social_security_number'  => 'required|string',
+                'national_id'              => 'required|string',
+                'nationality'              => 'nullable|string',
+                'citizenship'              => 'nullable|string',
+                'passport'                 => 'nullable|string',
+                'work_visa'                => 'nullable|string',
+                'visa_details'             => 'nullable|string',
+                'issue_date_national_id'   => 'nullable|date',
+                'issue_date_tax_id'        => 'nullable|date',
+                'issue_date_s_s_n'         => 'nullable|date',
+                'tax_id'                   => 'required|string',
+                'social_insurance_number'  => 'nullable|string',
 
+                // File uploads up to 5 MB
+                'ssn_file'                 => 'nullable|file|mimes:pdf,jpg,png|max:5120',
+                'national_id_file'         => 'nullable|file|mimes:pdf,jpg,png|max:5120',
+                'tax_id_file'              => 'nullable|file|mimes:pdf,jpg,png|max:5120',
+            ], [
+                // Custom messages for clarity
+                'ssn_file.max'             => 'SSN file must not exceed 5 MB.',
+                'ssn_file.mimes'           => 'SSN file must be a PDF or image (JPG/PNG).',
+                'national_id_file.max'     => 'National ID file must not exceed 5 MB.',
+                'national_id_file.mimes'   => 'National ID file must be a PDF or image (JPG/PNG).',
+                'tax_id_file.max'          => 'Tax ID file must not exceed 5 MB.',
+                'tax_id_file.mimes'        => 'Tax ID file must be a PDF or image (JPG/PNG).',
+            ])->validate();
 
             // Log::info('Validated legal data:', $validatedLegal);
 
@@ -195,11 +211,15 @@ class EmployeeController extends Controller
             // Step 5: Experience
             $expData = $requestData['experience'] ?? [];
             $validatedExperience = Validator::make($expData, [
-                'skill' => 'nullable|string',
-                'job' => 'nullable|string',
-                'language' => 'nullable|string',
+                'skill'     => 'nullable|string',
+                'job'       => 'nullable|string',
+                'language'  => 'nullable|string',
                 'education' => 'nullable|string',
-                'resume' => 'nullable|file|mimes:pdf,doc,docx|max:2048',
+                // Resume file max 5 MB
+                'resume'    => 'nullable|file|mimes:pdf,doc,docx|max:5120',
+            ], [
+                'resume.max'  => 'Resume file must not exceed 5 MB.',
+                'resume.mimes' => 'Resume file must be a PDF or Word document (doc/docx).',
             ])->validate();
 
             // Log::info('Validated experience data:', $validatedExperience);

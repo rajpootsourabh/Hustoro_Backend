@@ -65,6 +65,7 @@ Route::group(['middleware' => 'api', 'prefix' => 'v.1'], function ($router) {
         Route::get('/companies/{id}/subscriptions', [AdminSubscriptionController::class, 'show']);
     });
 
+    
     // 🔐 Public routes
     Route::post('register', [AuthController::class, 'register']);
     Route::post('login', [AuthController::class, 'login']);
