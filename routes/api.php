@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\AdminJobController;
 use App\Http\Controllers\Admin\AdminTimeOffRequestController;
 use App\Http\Controllers\Admin\AdminSubscriptionController;
 use App\Http\Controllers\Auth\PasswordResetController;
+use App\Http\Controllers\MeetingController;
 use App\Http\Controllers\TimeOffRequestController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
@@ -230,6 +231,9 @@ Route::group(['middleware' => 'api', 'prefix' => 'v.1'], function ($router) {
 
         // 📧 Mail Route
         Route::post('/send-employee-mail', [MailController::class, 'sendEmployeeEmail']);
+
+        //Meeting
+        Route::post('/meetings/schedule', [MeetingController::class, 'schedule']);
     });
 
     // Serve Files
