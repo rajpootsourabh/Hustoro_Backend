@@ -106,6 +106,7 @@ Route::group(['middleware' => 'api', 'prefix' => 'v.1'], function ($router) {
             Route::get('{employeeId}/assignments', [CandidateAssignmentController::class, 'getAssignedCandidatesForEmployee']);
             // Get all subordinates under a manager (employee)
             Route::get('{id}/subordinates', [EmployeeController::class, 'getSubordinates']); // GET /api/v1/employee/{id}/subordinates
+            Route::get('/onboarding-list', [EmployeeController::class, 'getOnboardingEmployees']);
         });
 
         // 📌 Job Applications Routes

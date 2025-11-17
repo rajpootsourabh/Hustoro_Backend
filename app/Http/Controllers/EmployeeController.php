@@ -663,6 +663,37 @@ class EmployeeController extends Controller
         }
     }
 
+    public function getOnboardingEmployees()
+    {
+        try {
+            $user = auth()->user();
+
+            if (!$user) {
+                return $this->errorResponse('Unauthorized', 401);
+            }
+
+            $employees = Employee::with(relations: 'jobDetail')
+                ->where('company_id', $user->company_id)
+                ->where('id', '!=', $user->employee_id) // Exclude the currently logged-in employee
+                ->orderBy('created_at', 'desc')
+                ->limit(10) // Get latest 10 employees
+                ->get()
+                ->map(function ($employee) {
+                    return [
+                        'id' => $employee->id,
+                        'first_name' => $employee->first_name,
+                        'last_name' => $employee->last_name,
+                        'job_title' => optional($employee->jobDetail)->job_title,
+                        'profile_image' => generateFileUrl($employee->profile_image),
+                    ];
+                });
+
+            return $this->successResponse($employees, 'Employees fetched for onboarding');
+        } catch (\Exception $e) {
+            return $this->errorResponse('Error: ' . $e->getMessage(), 500);
+        }
+    }
+
     // Returns all subordinates under a manager (employee)
     public function getSubordinates($managerId)
     {

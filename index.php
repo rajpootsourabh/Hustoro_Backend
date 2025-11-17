@@ -5,6 +5,6 @@ echo phpinfo();
 echo "First api";
 // Show just the module information.
 // phpinfo(8) yields identical results.
-phpinfo(INFO_MODULES);
+// phpinfo(INFO_MODULES);
 
 ?>
