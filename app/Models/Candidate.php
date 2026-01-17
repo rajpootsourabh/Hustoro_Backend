@@ -55,6 +55,11 @@ class Candidate extends Model
         return $this->belongsTo(Source::class);
     }
 
+    public function user()
+    {
+        return $this->hasOne(User::class, 'email', 'email');
+    }
+
     /**
      * Employees to whom this candidate is assigned.
      */
@@ -63,5 +68,10 @@ class Candidate extends Model
         return $this->belongsToMany(Employee::class, 'candidate_employee_assignments', 'candidate_id', 'employee_id')
             ->withPivot('assigned_by', 'notes', 'assigned_at') // removed 'status'
             ->withTimestamps();
+    }
+
+     public function jobAssignments()
+    {
+        return $this->hasMany(CandidateJob::class);
     }
 }

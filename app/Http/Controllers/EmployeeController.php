@@ -257,6 +257,8 @@ class EmployeeController extends Controller
             $userAccount = User::create([
                 'company_id' => $employee->company_id,
                 'employee_id' => $employee->id,
+                'first_name'  => $employee->first_name,
+                'last_name'   => $employee->last_name,
                 'email' => $employee->work_email ?? $employee->personal_email,
                 'password' => Hash::make($tempPassword),
                 'role' => 5, // Set correct role ID (e.g., 5 = Employee, adjust as needed)
@@ -276,7 +278,12 @@ class EmployeeController extends Controller
 
             // Send welcome email
             if (!empty($emailData['email'])) {
-                Mail::to($emailData['email'])->send(new EmployeeNotificationMail($emailData));
+                try {
+                    Mail::to($emailData['email'])->send(new EmployeeNotificationMail($emailData));
+                } catch (\Throwable $e) {
+                    // Log email error but don't fail the transaction
+                    Log::error('Failed to send employee notification email: ' . $e->getMessage());
+                }
             }
             DB::commit();
 

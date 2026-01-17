@@ -71,4 +71,25 @@ class Company extends Model
     {
         return $this->activeSubscription?->plan;
     }
+
+    // Add these relationships
+    public function companyStages()
+    {
+        return $this->hasMany(CompanyStage::class)->orderBy('stage_order');
+    }
+
+    public function activeStages()
+    {
+        return $this->hasMany(CompanyStage::class)->active()->orderBy('stage_order');
+    }
+
+    public function hiringStages()
+    {
+        return $this->activeStages()->where('type', 'hiring');
+    }
+
+    public function onboardingStages()
+    {
+        return $this->activeStages()->where('type', 'onboarding');
+    }
 }

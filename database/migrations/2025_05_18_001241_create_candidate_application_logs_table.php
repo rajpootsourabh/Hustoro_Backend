@@ -19,7 +19,6 @@ return new class extends Migration {
             $table->foreignId('changed_by')->constrained('users')->onDelete('cascade');
             $table->timestamp('changed_at')->useCurrent();
             $table->text('note')->nullable(); // optional note
-
             $table->timestamps();
         });
     }

@@ -19,16 +19,22 @@ use App\Http\Controllers\CandidateApplicationReviewController;
 use App\Http\Controllers\CandidateApplicationStageController;
 use App\Http\Controllers\CandidateAssignmentController;
 use App\Http\Controllers\CandidateController;
+use App\Http\Controllers\CandidateDocumentController;
+use App\Http\Controllers\CandidateJobController;
+use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CompanyProfileController;
+use App\Http\Controllers\CompanyStageController;
 use App\Http\Controllers\JobPostController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\JobApplicationController;
 use App\Http\Controllers\JobApplicationStatsController;
+use App\Http\Controllers\JobController;
 use App\Http\Controllers\MailController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\SimpleMailController;
 use App\Http\Controllers\TodoController;
 use App\Http\Controllers\UserProfileController;
@@ -66,10 +72,12 @@ Route::group(['middleware' => 'api', 'prefix' => 'v.1'], function ($router) {
         Route::get('/companies/{id}/subscriptions', [AdminSubscriptionController::class, 'show']);
     });
 
-    
+
     // 🔐 Public routes
     Route::post('register', [AuthController::class, 'register']);
     Route::post('login', [AuthController::class, 'login']);
+    Route::get('/documents', [AuthController::class, 'getAvailableDocuments']);
+
 
     // 📧 Password Reset (Public)
     Route::post('/password/forgot', [PasswordResetController::class, 'sendResetLink']);
@@ -121,6 +129,21 @@ Route::group(['middleware' => 'api', 'prefix' => 'v.1'], function ($router) {
             // ✅ Stage Pipeline APIs
             Route::post('/{applicationId}/next-stage', [CandidateApplicationStageController::class, 'moveToNextStage']);
             Route::post('/{applicationId}/set-stage', [CandidateApplicationStageController::class, 'setStage']);
+            Route::get('/{application}/available-stages', [CandidateApplicationStageController::class, 'getAvailableStages']);
+            Route::get('/{application}/stage-history', [CandidateApplicationStageController::class, 'getStageHistory']);
+            Route::get('/{application}/check-final-stage', [CandidateApplicationStageController::class, 'checkFinalStage']);
+
+            // 🔽 ADD CANDIDATE DOCUMENT ROUTES HERE
+            Route::get('/{application}/stage-documents', [CandidateDocumentController::class, 'getCandidateStageDocuments']);
+            Route::get('/{application}/completion-status', [CandidateDocumentController::class, 'getCompletionStatus']);
+            // Get all filled documents for candidate
+            Route::get('/{applicationId}/filled-documents', [CandidateDocumentController::class, 'getAllFilledDocuments']);
+            // 🔽 END OF CANDIDATE DOCUMENT ROUTES
+
+            // 🔽 NEW INDIVIDUAL DOCUMENT LINK ROUTES (add these)
+            Route::get('/{application}/available-documents', [CandidateDocumentController::class, 'getAvailableDocuments']);
+            Route::post('/{application}/generate-document-links', [CandidateDocumentController::class, 'generateDocumentLinks']);
+            Route::post('/{application}/send-document-links-email', [CandidateDocumentController::class, 'sendDocumentLinksEmail']);
 
             Route::post('/{applicationId}/disqualify', [JobApplicationController::class, 'disqualify']);
             Route::get('/{applicationId}', [JobApplicationController::class, 'getApplicationById']);
@@ -224,7 +247,42 @@ Route::group(['middleware' => 'api', 'prefix' => 'v.1'], function ($router) {
             Route::delete('/{id}', 'destroy'); // DELETE /api/v.1/todos/{id}
         });
 
+        // Shift routes
+        Route::get('/shifts', [ShiftController::class, 'index']);
+        Route::post('/shifts', [ShiftController::class, 'store']);
+        Route::get('/shifts/active', [ShiftController::class, 'active']);
+        Route::get('/shifts/{id}', [ShiftController::class, 'show']);
+        Route::put('/shifts/{id}', [ShiftController::class, 'update']);
+        Route::patch('/shifts/{id}', [ShiftController::class, 'update']);
+        Route::delete('/shifts/{id}', [ShiftController::class, 'destroy']);
+        Route::patch('/shifts/{id}/deactivate', [ShiftController::class, 'softDelete']);
 
+        // Job routes
+        Route::get('/jobs', [JobController::class, 'index']);
+        Route::post('/jobs', [JobController::class, 'store']);
+        Route::get('/jobs/{id}', [JobController::class, 'show']);
+        Route::put('/jobs/{id}', [JobController::class, 'update']);
+        Route::delete('/jobs/{id}', [JobController::class, 'destroy']);
+        Route::patch('/jobs/{id}/status', [JobController::class, 'updateStatus']);
+        Route::post('/jobs/{id}/assign', [JobController::class, 'assignToCandidate']);
+        Route::get('/candidates/{candidateId}/jobs', [JobController::class, 'getJobsByCandidateId']);
+
+        // Time tracking routes
+        Route::prefix('jobs')->group(function () {
+            Route::post('/{jobId}/time/start', [JobController::class, 'startTimeTracking']);
+            Route::post('/{jobId}/time/stop', [JobController::class, 'stopTimeTracking']);
+            Route::post('/{jobId}/time/pause', [JobController::class, 'pauseTimeTracking']);
+            Route::post('/{jobId}/time/resume', [JobController::class, 'resumeTimeTracking']);
+            Route::get('/{jobId}/time/logs', [JobController::class, 'getTimeLogs']);
+            Route::get('/candidates/{candidateId}/time/summary', [JobController::class, 'getCandidateTimeSummary']);
+        });
+
+        // Client routes
+        Route::get('/clients', [ClientController::class, 'index']);
+        Route::post('/clients', [ClientController::class, 'store']);
+        Route::get('/clients/{id}', [ClientController::class, 'show']);
+        Route::put('/clients/{id}', [ClientController::class, 'update']);
+        Route::delete('/clients/{id}', [ClientController::class, 'destroy']);
 
         //Update at later stage above as comapny profile
         Route::get('/profile', [UserProfileController::class, 'show']);
@@ -235,8 +293,27 @@ Route::group(['middleware' => 'api', 'prefix' => 'v.1'], function ($router) {
 
         //Meeting
         Route::post('/meetings/schedule', [MeetingController::class, 'schedule']);
+
+        // 🏢 Company Stages Management
+        Route::prefix('companies/{company}')->group(function () {
+            Route::get('/stages', [CompanyStageController::class, 'getCompanyStages']);
+            Route::post('/stages', [CompanyStageController::class, 'createStage']);
+            Route::put('/stages/{stage}', [CompanyStageController::class, 'updateStage']);
+            Route::delete('/stages/{stage}', [CompanyStageController::class, 'deleteStage']);
+            Route::put('/stages/{stage}/documents', [CompanyStageController::class, 'updateStageDocuments']);
+            Route::post('/stages/reorder', [CompanyStageController::class, 'reorderStages']);
+        });
     });
 
-    // Serve Files
+    // 🔓 PUBLIC CANDIDATE DOCUMENT ROUTES (outside auth middleware)
+    Route::prefix('candidate')->group(function () {
+        // NEW ROUTES FOR INDIVIDUAL DOCUMENTS (add these)
+        Route::get('/document/{token}', [CandidateDocumentController::class, 'showCandidateDocument']);
+        Route::post('/document/{token}/submit', [CandidateDocumentController::class, 'submitCompletedDocument']);
+    });
+
+    // Serve Private Files
     Route::get('/files/{path}', [FileController::class, 'show'])->where('path', '.*');
+    // Serve Public Files (new - for documents, templates, etc.)
+    Route::get('/public/{path}', [FileController::class, 'showPublic'])->where('path', '.*');
 });

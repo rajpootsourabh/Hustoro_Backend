@@ -1,6 +1,5 @@
 <?php
 
-
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
@@ -19,8 +18,6 @@ class CandidateApplicationLog extends Model
 
     protected $casts = [
         'changed_at' => 'datetime',
-        'from_stage' => 'integer',
-        'to_stage' => 'integer',
     ];
 
     // Relationships
@@ -34,28 +31,53 @@ class CandidateApplicationLog extends Model
         return $this->belongsTo(User::class, 'changed_by');
     }
 
-    // Optional helper: map stage ID to name
-    public static function stageLabel(int $stage): string
+    /**
+     * Get the from stage (company stage)
+     */
+    public function fromStage(): BelongsTo
     {
-        return match ($stage) {
-            1 => 'Sourced',
-            2 => 'Applied',
-            3 => 'Phone Screen',
-            4 => 'Assessment',
-            5 => 'Interview',
-            6 => 'Offer',
-            7 => 'Hired',
-            default => 'Unknown',
-        };
+        return $this->belongsTo(CompanyStage::class, 'from_stage');
     }
 
+    /**
+     * Get the to stage (company stage)
+     */
+    public function toStage(): BelongsTo
+    {
+        return $this->belongsTo(CompanyStage::class, 'to_stage');
+    }
+
+    /**
+     * Get from stage label
+     */
     public function getFromStageLabelAttribute(): string
     {
-        return $this->from_stage ? self::stageLabel($this->from_stage) : '-';
+        if (!$this->from_stage) {
+            return 'Initial Stage';
+        }
+        
+        return $this->fromStage ? $this->fromStage->name : 'Unknown Stage';
     }
 
+    /**
+     * Get to stage label
+     */
     public function getToStageLabelAttribute(): string
     {
-        return self::stageLabel($this->to_stage);
+        return $this->toStage ? $this->toStage->name : 'Unknown Stage';
+    }
+
+    /**
+     * Check if this log represents a hire action
+     */
+    public function isHireAction(): bool
+    {
+        // Check if moving to a stage that indicates hiring
+        if ($this->toStage) {
+            return strtolower($this->toStage->name) === 'hired' || 
+                   strtolower($this->toStage->name) === 'onboarding' ||
+                   $this->toStage->type === 'onboarding';
+        }
+        return false;
     }
 }

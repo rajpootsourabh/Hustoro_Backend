@@ -14,6 +14,8 @@ class DatabaseSeeder extends Seeder
             EmployeeLeaveBalanceSeeder::class,
             SubscriptionPlanSeeder::class,
             SubscriptionPlanFeatureSeeder::class,
+            CompanyStagesSeeder::class,
+            DocumentsSeeder::class
 
         ]);
     }

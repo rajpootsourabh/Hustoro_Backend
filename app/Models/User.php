@@ -68,11 +68,20 @@ class User extends Authenticatable implements JWTSubject
         return $this->belongsTo(Company::class);
     }
 
-     /**
+    /**
      * Relationship: Each user is an employee
      */
     public function employee()
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    /**
+     * Relationship: Each user is a candidate (if role = 6)
+     * Note: This assumes candidates.email matches users.email
+     */
+    public function candidate()
+    {
+        return $this->hasOne(Candidate::class, 'email', 'email');
     }
 }

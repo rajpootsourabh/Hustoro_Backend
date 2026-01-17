@@ -7,16 +7,23 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use App\Models\Candidate;
 use App\Models\CandidateApplication;
+use App\Models\CompanyStage;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use App\Models\Company;
 use App\Models\JobPost;
 use App\Models\Stage;
+use App\Models\User;
 use App\Traits\ApiResponse;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 
 class JobApplicationController extends Controller
 {
     use ApiResponse;
+
     /**
      * Apply for a job, creating a new candidate and application record.
      */
@@ -47,7 +54,6 @@ class JobApplicationController extends Controller
             'expected_ctc'   => 'required|numeric|min:0',
             'profile_pic'    => 'nullable|file|mimes:jpg,jpeg,png|max:5120',
             'resume'         => 'nullable|file|mimes:pdf,doc,docx|max:5120',
-            'source_id'      => 'nullable|integer|exists:sources,id',
             'company_id'     => 'nullable|integer|exists:companies,id',
             'job_id'         => 'required|exists:job_posts,id',
             'status'         => 'nullable|in:Active,Rejected',
@@ -57,6 +63,7 @@ class JobApplicationController extends Controller
             'profile_pic.mimes' => 'Profile picture must be a JPG, JPEG, or PNG.',
             'resume.max'        => 'Resume must not exceed 5 MB.',
             'resume.mimes'      => 'Resume must be a PDF, DOC, or DOCX file.',
+            'email.unique'      => 'A candidate with this email already exists.',
         ]);
 
         // Ensure the job post belongs to the same company
@@ -71,39 +78,137 @@ class JobApplicationController extends Controller
         // Enforce company_id
         $validated['company_id'] = $user->company_id;
 
-        // Handle profile pic
-        if ($request->hasFile('profile_pic')) {
-            $validated['profile_pic'] = $request->file('profile_pic')->storeAs(
-                'candidates/profile_pics',
-                uniqid() . '.' . $request->file('profile_pic')->extension(),
-                'private'
+        DB::beginTransaction();
+
+        try {
+            // Handle profile pic
+            if ($request->hasFile('profile_pic')) {
+                $validated['profile_pic'] = $request->file('profile_pic')->storeAs(
+                    'candidates/profile_pics',
+                    uniqid() . '.' . $request->file('profile_pic')->extension(),
+                    'private'
+                );
+            }
+
+            // Handle resume
+            if ($request->hasFile('resume')) {
+                $validated['resume'] = $request->file('resume')->storeAs(
+                    'candidates/resumes',
+                    uniqid() . '.' . $request->file('resume')->extension(),
+                    'private'
+                );
+            }
+
+            // Create candidate
+            $candidate = Candidate::create($validated);
+
+            // Get the first stage for this company (lowest stage_order)
+            $firstStage = CompanyStage::where('company_id', $user->company_id)
+                ->where('is_active', true)
+                ->orderBy('stage_order')
+                ->first();
+
+            // Create application with company_stage_id
+            $applicationData = [
+                'candidate_id' => $candidate->id,
+                'job_post_id' => $validated['job_id'],
+                'status' => $validated['status'] ?? 'Active',
+            ];
+
+            if ($firstStage) {
+                $applicationData['company_stage_id'] = $firstStage->id;
+            }
+
+            $application = CandidateApplication::create($applicationData);
+
+            // Create user account for candidate (role = 6)
+            // $tempPassword = Str::random(10); // Generate a random temporary password
+
+            // $candidateUser = User::create([
+            //     'company_id' => $user->company_id,
+            //     'first_name' => $validated['first_name'],
+            //     'last_name' => $validated['last_name'],
+            //     'email' => $validated['email'],
+            //     'password' => Hash::make($tempPassword),
+            //     'role' => 6, // Candidate role
+            //     'is_active' => 1,
+            // ]);
+
+            // Link candidate to user (if you have a candidate_id column in users table)
+            // If not, you can store the relationship differently or skip this
+            // $candidateUser->candidate_id = $candidate->id;
+            // $candidateUser->save();
+
+            // Send welcome email to candidate with temporary password
+            // $this->sendCandidateWelcomeEmail($candidate, $tempPassword, $job);
+
+            // Check if user is an employee (role = 5) and has an employee_id
+            // Create candidate_employee_assignment record if applicable
+            if ($user->role == 5 && $user->employee_id) {
+                try {
+                    DB::table('candidate_employee_assignments')->insert([
+                        'employee_id' => $user->employee_id,
+                        'candidate_id' => $candidate->id,
+                        'assigned_by' => $user->id,
+                        'notes' => 'Auto-assigned to employee who created the candidate',
+                        'assigned_at' => now(),
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error('Failed to create candidate_employee_assignment: ' . $e->getMessage());
+                }
+            }
+
+            DB::commit();
+
+            // Load the relationships for the resource
+            $application->load(['candidate', 'companyStage', 'jobPost']);
+
+            return $this->successResponse(
+                new JobApplicationResource($application),
+                'Job application submitted successfully. Candidate account created and welcome email sent.',
+                201
             );
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed to apply for job: ' . $e->getMessage());
+
+            return response()->json([
+                "status" => "error",
+                "message" => "Failed to submit application: " . $e->getMessage()
+            ], 500);
         }
+    }
 
-        // Handle resume
-        if ($request->hasFile('resume')) {
-            $validated['resume'] = $request->file('resume')->storeAs(
-                'candidates/resumes',
-                uniqid() . '.' . $request->file('resume')->extension(),
-                'private'
-            );
+    /**
+     * Send welcome email to candidate with temporary password
+     */
+    private function sendCandidateWelcomeEmail(Candidate $candidate, string $tempPassword, JobPost $job)
+    {
+        try {
+            $company = $candidate->company;
+
+            $mailData = [
+                'candidate_name' => $candidate->first_name . ' ' . $candidate->last_name,
+                'email' => $candidate->email,
+                'temp_password' => $tempPassword,
+                'job_title' => $job->job_title,
+                'company_name' => $company->name ?? 'Our Company',
+                'login_url' => config('app.frontend_url') . '/signin',
+            ];
+
+            // Create and send email
+            Mail::send('emails.candidate-welcome', $mailData, function ($message) use ($candidate, $company) {
+                $message->to($candidate->email)
+                    ->subject('Welcome to ' . ($company->name ?? 'Our Platform') . ' - Your Candidate Account');
+            });
+
+            Log::info('Candidate welcome email sent to: ' . $candidate->email);
+        } catch (\Exception $e) {
+            Log::error('Failed to send candidate welcome email: ' . $e->getMessage());
+            // Don't throw error, just log it
         }
-
-        // Create candidate
-        $candidate = Candidate::create($validated);
-
-        // Create application
-        $application = CandidateApplication::create([
-            'candidate_id' => $candidate->id,
-            'job_post_id' => $validated['job_id'],
-            // 'status' => $validated['status'] ?? 'Active',
-        ]);
-
-        return $this->successResponse(
-            new JobApplicationResource($application),
-            'Job application submitted successfully',
-            201
-        );
     }
 
     public function updateCandidateApplication(Request $request, $applicationId)
@@ -249,7 +354,11 @@ class JobApplicationController extends Controller
         }
 
         // Start query
-        $applicationsQuery = CandidateApplication::with(['candidate', 'jobPost'])
+        $applicationsQuery = CandidateApplication::with([
+            'candidate',
+            'jobPost',
+            'companyStage' // Include company stage relationship
+        ])
             ->whereHas('candidate', function ($query) use ($user) {
                 $query->where('company_id', $user->company_id);
             });
@@ -268,6 +377,19 @@ class JobApplicationController extends Controller
                         ->where('employee_id', $user->employee_id);
                 });
             });
+        }
+
+        // If role is 6 (Candidate), only show the candidate's own applications
+        if ($user->role == 6) {
+            // Find the candidate record associated with this user (by email)
+            $candidate = Candidate::where('email', $user->email)->first();
+
+            if (!$candidate) {
+                return response()->json(['status' => 'error', 'message' => 'No candidate profile found for this user'], 404);
+            }
+
+            // Filter only applications for this specific candidate
+            $applicationsQuery->where('candidate_id', $candidate->id);
         }
 
         // Execute query
@@ -291,6 +413,14 @@ class JobApplicationController extends Controller
                 'candidate_id' => $application->candidate_id,
                 'job_post_id' => $application->job_post_id,
                 'status' => $application->status,
+                'stage_id' => $application->stage_id, // Legacy stage_id
+                'company_stage_id' => $application->company_stage_id, // New company stage
+                'current_stage' => $application->companyStage ? [
+                    'id' => $application->companyStage->id,
+                    'name' => $application->companyStage->name,
+                    'type' => $application->companyStage->type,
+                    'stage_order' => $application->companyStage->stage_order,
+                ] : null,
                 'applied_at' => $application->created_at->toDateTimeString(),
                 'created_at' => $application->created_at->toIso8601String(),
                 'updated_at' => $application->updated_at->toIso8601String(),
@@ -353,7 +483,11 @@ class JobApplicationController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Unauthorized or company not set'], 403);
         }
 
-        $application = CandidateApplication::with(['candidate', 'jobPost.company'])->find($applicationId);
+        $application = CandidateApplication::with([
+            'candidate',
+            'jobPost.company',
+            'companyStage'
+        ])->find($applicationId);
 
         if (!$application) {
             return response()->json(['status' => 'error', 'message' => 'Application not found'], 404);
@@ -362,6 +496,36 @@ class JobApplicationController extends Controller
         // Check if candidate's company matches the authenticated user's company
         if ($application->candidate->company_id !== $user->company_id) {
             return response()->json(['status' => 'error', 'message' => 'Access denied'], 403);
+        }
+
+        // Check permissions based on role
+        if ($user->role == 5) {
+            // Employee: check if candidate is assigned to them
+            if (!$user->employee_id) {
+                return response()->json(['status' => 'error', 'message' => 'No employee profile linked to user'], 403);
+            }
+
+            $isAssigned = DB::table('candidate_employee_assignments')
+                ->where('employee_id', $user->employee_id)
+                ->where('candidate_id', $application->candidate_id)
+                ->exists();
+
+            if (!$isAssigned) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized to view this application'], 403);
+            }
+        }
+
+        if ($user->role == 6) {
+            // Candidate: check if this is their own application
+            $candidate = Candidate::where('email', $user->email)->first();
+
+            if (!$candidate) {
+                return response()->json(['status' => 'error', 'message' => 'No candidate profile found for this user'], 404);
+            }
+
+            if ($application->candidate_id != $candidate->id) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized to view this application'], 403);
+            }
         }
 
         $candidate = $application->candidate;
@@ -379,7 +543,14 @@ class JobApplicationController extends Controller
             'candidate_id' => $application->candidate_id,
             'job_post_id' => $application->job_post_id,
             'status' => $application->status,
-            'current_stage' => $application->stage_id,
+            'stage_id' => $application->stage_id, // Legacy
+            'company_stage_id' => $application->company_stage_id, // New
+            'current_stage' => $application->companyStage ? [
+                'id' => $application->companyStage->id,
+                'name' => $application->companyStage->name,
+                'type' => $application->companyStage->type,
+                'stage_order' => $application->companyStage->stage_order,
+            ] : null,
             'applied_at' => $application->created_at->toDateTimeString(),
             'created_at' => $application->created_at->toIso8601String(),
             'updated_at' => $application->updated_at->toIso8601String(),
@@ -457,60 +628,11 @@ class JobApplicationController extends Controller
         $application->status = 'Rejected';
         $application->save();
 
-        // Log the disqualification
-        // CandidateApplicationLog::create([
-        //     'candidate_application_id' => $application->id,
-        //     'from_stage' => $fromStage,
-        //     'to_stage' => $fromStage, // stage doesn't change, only status
-        //     'changed_by' => Auth::id(),
-        //     'changed_at' => now(),
-        //     'note' => $request->input('note', 'Disqualified'),
-        // ]);
-
         return response()->json([
             'message' => 'Candidate disqualified successfully.',
             'application' => $application,
         ]);
     }
-
-    // public function moveToNextStage($applicationId)
-    // {
-    //     $application = CandidateApplication::findOrFail($applicationId);
-    //     $currentStage = Stage::find($application->stage_id);
-
-    //     $nextStage = Stage::where('id', '>', $currentStage->id)->orderBy('id')->first();
-
-    //     if ($nextStage) {
-    //         $application->stage_id = $nextStage->id;
-    //         $application->save();
-
-    //         return response()->json([
-    //             'message' => 'Moved to next stage',
-    //             'new_stage' => $nextStage->name,
-    //         ]);
-    //     }
-
-    //     return response()->json(['message' => 'Already at final stage'], 400);
-    // }
-
-
-    // public function setStage(Request $request, $applicationId)
-    // {
-    //     $stageId = $request->input('stage_id');
-
-    //     if (!Stage::find($stageId)) {
-    //         return response()->json(['error' => 'Invalid stage ID'], 400);
-    //     }
-
-    //     $application = CandidateApplication::findOrFail($applicationId);
-    //     $application->stage_id = $stageId;
-    //     $application->save();
-
-    //     return response()->json([
-    //         'message' => 'Stage updated successfully',
-    //         'application' => $application,
-    //     ]);
-    // }
 
     public function getApplicationsForJob(Request $request, $jobPostId)
     {
@@ -525,7 +647,7 @@ class JobApplicationController extends Controller
             ], 403);
         }
 
-        $query = CandidateApplication::with(['candidate'])
+        $query = CandidateApplication::with(['candidate', 'companyStage']) // Include company stage
             ->where('job_post_id', $jobPostId)
             ->where('status', 'Active');
 
@@ -576,7 +698,13 @@ class JobApplicationController extends Controller
             'id' => $app->id,
             'applied_at' => $app->applied_at,
             'status' => $app->status,
-            'stage_id' => $app->stage_id,
+            'stage_id' => $app->stage_id, // Legacy
+            'company_stage_id' => $app->company_stage_id, // New
+            'current_stage' => $app->companyStage ? [
+                'id' => $app->companyStage->id,
+                'name' => $app->companyStage->name,
+                'type' => $app->companyStage->type,
+            ] : null,
         ]);
 
         $candidates = collect($applications->items())->map(function ($app) use ($generateFileUrl) {
