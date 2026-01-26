@@ -28,6 +28,7 @@ use App\Http\Controllers\JobPostController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\FileController;
+use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\JobApplicationController;
 use App\Http\Controllers\JobApplicationStatsController;
 use App\Http\Controllers\JobController;
@@ -177,6 +178,8 @@ Route::group(['middleware' => 'api', 'prefix' => 'v.1'], function ($router) {
         // 👥 Candidate Assignments
         Route::prefix('candidate')->group(function () {
             Route::get('/', [CandidateController::class, 'listCandidates']);
+            Route::get('/employee-assigned', [CandidateController::class, 'getCandidatesByEmployee']);
+            Route::get('/work-summary', [CandidateController::class, 'getCandidateWorkSummary']);
             // Assign a candidate to an employee
             Route::post('{candidateId}/assignments', [CandidateAssignmentController::class, 'assign']);
             // Unassign a candidate from an employee
@@ -283,6 +286,21 @@ Route::group(['middleware' => 'api', 'prefix' => 'v.1'], function ($router) {
         Route::get('/clients/{id}', [ClientController::class, 'show']);
         Route::put('/clients/{id}', [ClientController::class, 'update']);
         Route::delete('/clients/{id}', [ClientController::class, 'destroy']);
+
+
+        // Invoice routes
+        Route::prefix('invoices')->group(function () {
+            Route::get('/work-hours/employee', [InvoiceController::class, 'candidateWorkHoursByEmployee']);
+            Route::get('/employee/dashboard-summary', [InvoiceController::class, 'employeeDashboardSummary']);
+            Route::post('/employee/create', [InvoiceController::class, 'createInvoiceForEmployee']);
+            Route::get('/employee/list', [InvoiceController::class, 'getEmployeeInvoices']);
+            Route::get('/candidate/{candidateId}', [InvoiceController::class, 'getCandidateInvoices']);
+            Route::get('/{id}/pdf', [InvoiceController::class, 'generatePDF']);
+            Route::put('/{id}/status', [InvoiceController::class, 'updateStatus']);
+            Route::get('/employee/statistics', [InvoiceController::class, 'employeeInvoiceStatistics']);
+            Route::put('/{id}', [InvoiceController::class, 'update']);
+            Route::delete('/{id}', [InvoiceController::class, 'destroy']);
+        });
 
         //Update at later stage above as comapny profile
         Route::get('/profile', [UserProfileController::class, 'show']);
