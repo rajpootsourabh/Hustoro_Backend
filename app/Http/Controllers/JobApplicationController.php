@@ -53,7 +53,7 @@ class JobApplicationController extends Controller
             'current_ctc'    => 'nullable|numeric|min:0',
             'expected_ctc'   => 'required|numeric|min:0',
             'profile_pic'    => 'nullable|file|mimes:jpg,jpeg,png|max:5120',
-            'resume'         => 'nullable|file|mimes:pdf,doc,docx|max:5120',
+            'resume'         => 'nullable|file|mimes:pdf,doc,docx|max:10240',
             'company_id'     => 'nullable|integer|exists:companies,id',
             'job_id'         => 'required|exists:job_posts,id',
             'status'         => 'nullable|in:Active,Rejected',
@@ -61,7 +61,7 @@ class JobApplicationController extends Controller
             // Custom messages
             'profile_pic.max'   => 'Profile picture must not exceed 5 MB.',
             'profile_pic.mimes' => 'Profile picture must be a JPG, JPEG, or PNG.',
-            'resume.max'        => 'Resume must not exceed 5 MB.',
+            'resume.max'        => 'Resume must not exceed 10 MB.',
             'resume.mimes'      => 'Resume must be a PDF, DOC, or DOCX file.',
             'email.unique'      => 'A candidate with this email already exists.',
         ]);
@@ -239,12 +239,12 @@ class JobApplicationController extends Controller
             'country'      => 'required|string|max:191',
             'education'    => 'required|string|max:191',
             'profile_pic'  => 'sometimes|file|mimes:jpg,jpeg,png|max:5120',
-            'resume'       => 'sometimes|file|mimes:pdf,doc,docx|max:5120',
+            'resume'       => 'sometimes|file|mimes:pdf,doc,docx|max:10240',
         ], [
             // Custom messages
             'profile_pic.max'   => 'Profile picture must not exceed 5 MB.',
             'profile_pic.mimes' => 'Profile picture must be a JPG, JPEG, or PNG.',
-            'resume.max'        => 'Resume must not exceed 5 MB.',
+            'resume.max'        => 'Resume must not exceed 10 MB.',
             'resume.mimes'      => 'Resume must be a PDF, DOC, or DOCX file.',
 
             // Some useful extras
@@ -270,11 +270,11 @@ class JobApplicationController extends Controller
         // Validate only the files that are present
         $request->validate([
             'profile_pic' => 'sometimes|file|mimes:jpg,jpeg,png|max:5120',
-            'resume'      => 'sometimes|file|mimes:pdf,doc,docx|max:5120',
+            'resume'      => 'sometimes|file|mimes:pdf,doc,docx|max:10240',
         ], [
             'profile_pic.max'   => 'Profile picture must not exceed 5 MB.',
             'profile_pic.mimes' => 'Profile picture must be a JPG, JPEG, or PNG.',
-            'resume.max'        => 'Resume must not exceed 5 MB.',
+            'resume.max'        => 'Resume must not exceed 10 MB.',
             'resume.mimes'      => 'Resume must be a PDF, DOC, or DOCX file.',
         ]);
 
